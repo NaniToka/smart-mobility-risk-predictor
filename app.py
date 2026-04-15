@@ -5,18 +5,18 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return jsonify({"message": "Smart Mobility Risk Predictor Running 🚀"})
+    return jsonify({"message": "Running 🚀"})
 
 @app.route("/predict", methods=["POST"])
 def predict():
     return jsonify({
-        "risk_score": 60,
+        "risk_score": 50,
         "risk_level": "Medium",
-        "advice": "Drive carefully",
-        "reason": "Moderate traffic and weather conditions",
+        "advice": "Be careful",
+        "reason": "Test response",
         "weather": {
-            "temperature": 28,
-            "condition": "Cloudy"
+            "temperature": 25,
+            "condition": "Clear"
         }
     })
 
