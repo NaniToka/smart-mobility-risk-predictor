@@ -1,0 +1,22 @@
+[
+  {
+    "timestamp": "2024-01-01T08:30:00",
+    "lat": 40.7128,
+    "lon": -74.0060,
+    "traffic_level": 4,
+    "time_hour": 8,
+    "risk_score": 72,
+    "risk_level": "High",
+    "weather_condition": "Rain"
+  },
+  {
+    "timestamp": "2024-01-01T14:00:00",
+    "lat": 40.7128,
+    "lon": -74.0060,
+    "traffic_level": 2,
+    "time_hour": 14,
+    "risk_score": 28,
+    "risk_level": "Low",
+    "weather_condition": "Clear"
+  }
+]

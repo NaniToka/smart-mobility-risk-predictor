@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="robots" content="noindex">
+<title>Smart Mobility Risk Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: linear-gradient(135deg, #0a0f1e, #0d1f35, #0f2d40);
+  --card: rgba(255,255,255,0.06);
+  --card-hover: rgba(255,255,255,0.09);
+  --border: rgba(255,255,255,0.12);
+  --primary: #4facfe;
+  --secondary: #00f2fe;
+  --accent: #a78bfa;
+  --low: #00e676;
+  --moderate: #ffea00;
+  --high: #ff9100;
+  --critical: #ff1744;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: #fff;
+  min-height: 100vh;
+  padding: 20px 16px;
+}
+
+/* ── Layout ── */
+.page-title {
+  text-align: center;
+  margin-bottom: 20px;
+}
+.page-title h1 {
+  font-size: 28px;
+  font-weight: 700;
+  background: linear-gradient(90deg, var(--primary), var(--accent), var(--secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.page-title p {
+  font-size: 13px;
+  color: rgba(255,255,255,0.45);
+  margin-top: 4px;
+}
+.wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+#input-card  { grid-column: 1; grid-row: 1 / 4; }
+#result      { grid-column: 2; grid-row: 1; display: none; }
+#forecast-card { grid-column: 2; grid-row: 2; display: none; }
+#history-card  { grid-column: 2; grid-row: 3; display: none; }
+
+@media (max-width: 900px) {
+  .wrap { grid-template-columns: 1fr; }
+  #input-card, #result, #forecast-card, #history-card { grid-column: 1; grid-row: auto; }
+}
+
+/* ── Card ── */
+.card {
+  background: var(--card);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 28px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.card-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+  margin-bottom: 16px;
+}
+
+/* ── Form ── */
+.field { margin-bottom: 18px; }
+.field label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+  margin-bottom: 7px;
+}
+.field label span { color: var(--secondary); font-weight: 700; }
+input[type=range] { width: 100%; accent-color: var(--primary); cursor: pointer; height: 4px; }
+input[type=number], input[type=text] {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.05);
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+  transition: border 0.2s, box-shadow 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+input[type=number]:focus, input[type=text]:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79,172,254,0.15);
+}
+.row { display: flex; gap: 10px; }
+.row .field { flex: 1; }
+
+/* toggle */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 11px 14px;
+  margin-bottom: 18px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.75);
+}
+.toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.slider-toggle {
+  position: absolute; inset: 0;
+  background: rgba(255,255,255,0.15);
+  border-radius: 22px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+.slider-toggle:before {
+  content: '';
+  position: absolute;
+  width: 16px; height: 16px;
+  left: 3px; top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.3s;
+}
+.toggle input:checked + .slider-toggle { background: var(--primary); }
+.toggle input:checked + .slider-toggle:before { transform: translateX(18px); }
+
+/* buttons */
+.btn-sm {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--border);
+  color: #fff;
+  padding: 7px 13px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+.btn-sm:hover { background: rgba(255,255,255,0.16); }
+.btn-predict {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  color: rgba(0,0,0,0.85);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 20px rgba(79,172,254,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: 'Inter', sans-serif;
+}
+.btn-predict:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(79,172,254,0.5); }
+.btn-predict:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(0,0,0,0.2);
+  border-top-color: rgba(0,0,0,0.7);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* live mode */
+.live-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+}
+.live-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #555;
+  display: inline-block;
+  margin-right: 6px;
+  transition: background 0.3s;
+}
+.live-dot.active { background: var(--low); box-shadow: 0 0 6px var(--low); animation: pulse-dot 1.5s infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ── Map ── */
+#map-wrap {
+  margin-bottom: 18px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  position: relative;
+}
+.map-search {
+  display: flex;
+  gap: 8px;
+  padding: 10px 10px 6px;
+  background: rgba(0,0,0,0.2);
+}
+.map-search input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.07);
+  color: #fff;
+  font-size: 12px;
+  outline: none;
+  font-family: 'Inter', sans-serif;
+}
+#search-msg { font-size: 11px; color: rgba(255,255,255,0.5); padding: 3px 10px 5px; min-height: 16px; background: rgba(0,0,0,0.2); }
+#map { height: 240px; width: 100%; }
+.map-hint {
+  position: absolute;
+  bottom: 8px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.6);
+  color: rgba(255,255,255,0.65);
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 999;
+}
+.leaflet-tile { filter: brightness(0.8) saturate(0.85); }
+.leaflet-control-attribution { background: rgba(0,0,0,0.5) !important; color: rgba(255,255,255,0.35) !important; font-size: 9px !important; }
+.leaflet-control-attribution a { color: rgba(255,255,255,0.4) !important; }
+.leaflet-control-zoom a { background: rgba(10,20,40,0.9) !important; color: #fff !important; border-color: var(--border) !important; }
+
+/* route mode */
+.route-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.route-btn {
+  flex: 1;
+  padding: 8px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.6);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+.route-btn.active { background: rgba(79,172,254,0.2); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+/* ── Result ── */
+@keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+
+/* gauge */
+.gauge-wrap { text-align: center; margin-bottom: 18px; position: relative; }
+.gauge-svg { width: 200px; height: 110px; overflow: visible; }
+.gauge-track { fill: none; stroke: rgba(255,255,255,0.08); stroke-width: 16; stroke-linecap: round; }
+.gauge-fill  { fill: none; stroke-width: 16; stroke-linecap: round;
+               stroke-dasharray: 251; stroke-dashoffset: 251;
+               transition: stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1), stroke 0.5s; }
+.gauge-score { font-size: 42px; font-weight: 700; line-height: 1; }
+.gauge-sub   { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+
+/* source tag */
+.source-tag {
+  display: inline-block;
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  margin-bottom: 14px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.source-live      { background: rgba(0,230,118,0.12); color: var(--low);      border: 1px solid rgba(0,230,118,0.25); }
+.source-simulated { background: rgba(255,234,0,0.08); color: var(--moderate); border: 1px solid rgba(255,234,0,0.2); }
+
+/* weather strip */
+.weather-strip { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; margin-bottom: 16px; }
+.badge {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 11px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* advice */
+.advice-box {
+  background: rgba(0,0,0,0.25);
+  border-radius: 14px;
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+}
+.advice-level { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; margin-bottom: 5px; }
+.advice-text  { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+
+/* AI report */
+.ai-report {
+  background: linear-gradient(135deg, rgba(167,139,250,0.08), rgba(79,172,254,0.08));
+  border: 1px solid rgba(167,139,250,0.2);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(255,255,255,0.85);
+  position: relative;
+}
+.ai-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.ai-typing::after {
+  content: '▋';
+  animation: blink 1s infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* breakdown bars */
+.breakdown { margin-bottom: 16px; }
+.breakdown-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.breakdown-label { width: 60px; color: rgba(255,255,255,0.6); flex-shrink: 0; }
+.breakdown-bar-wrap { flex: 1; background: rgba(255,255,255,0.07); border-radius: 6px; height: 8px; overflow: hidden; }
+.breakdown-bar { height: 100%; border-radius: 6px; transition: width 1s cubic-bezier(.4,0,.2,1); width: 0; }
+.breakdown-pts { width: 32px; text-align: right; font-weight: 600; color: rgba(255,255,255,0.8); flex-shrink: 0; }
+
+/* best time */
+.best-time-box {
+  background: rgba(0,230,118,0.07);
+  border: 1px solid rgba(0,230,118,0.2);
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+.best-time-label { color: rgba(255,255,255,0.6); font-size: 11px; }
+.best-time-val   { font-size: 18px; font-weight: 700; color: var(--low); }
+
+/* simulations */
+.sim-title { font-size: 10px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+.sim-btns  { display: flex; gap: 8px; margin-bottom: 10px; }
+.sim-btns .btn-sm { flex: 1; padding: 9px 6px; font-weight: 600; border-radius: 10px; text-align: center; font-size: 11px; }
+#sim-result {
+  display: none;
+  background: rgba(0,0,0,0.2);
+  border-radius: 12px;
+  padding: 14px;
+  animation: fadeUp 0.3s ease;
+}
+.sim-scores { display: flex; align-items: center; justify-content: center; gap: 20px; margin-bottom: 8px; }
+.sim-score-box { text-align: center; }
+.sim-score-box .lbl { font-size: 10px; color: rgba(255,255,255,0.5); margin-bottom: 3px; }
+.sim-score-box .val { font-size: 26px; font-weight: 700; }
+.sim-arrow { font-size: 18px; color: rgba(255,255,255,0.2); }
+#sim-msg { text-align: center; font-size: 12px; font-weight: 600; color: var(--moderate); padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.07); }
+
+/* action buttons */
+.action-row { display: flex; gap: 8px; margin-top: 14px; }
+.action-row .btn-sm { flex: 1; text-align: center; padding: 9px; font-size: 11px; }
+
+/* ── Forecast card ── */
+.forecast-grid { display: flex; gap: 6px; flex-wrap: wrap; }
+.forecast-item {
+  flex: 1;
+  min-width: 52px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 4px;
+  text-align: center;
+  transition: background 0.2s;
+}
+.forecast-item:hover { background: rgba(255,255,255,0.1); }
+.forecast-hour { font-size: 10px; color: rgba(255,255,255,0.5); margin-bottom: 4px; }
+.forecast-emoji { font-size: 14px; margin-bottom: 3px; }
+.forecast-score { font-size: 13px; font-weight: 700; }
+
+/* ── History ── */
+#history-list { list-style: none; }
+#history-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 12px;
+  color: rgba(255,255,255,0.65);
+}
+#history-list li:last-child { border-bottom: none; }
+.hist-score { font-weight: 700; font-size: 14px; }
+
+/* risk colours */
+.c-low      { color: var(--low); }
+.c-moderate { color: var(--moderate); }
+.c-high     { color: var(--high); }
+.c-critical { color: var(--critical); }
+
+/* geo row */
+.geo-row { display: flex; justify-content: space-between; align-items: flex-start; margin-top: -10px; margin-bottom: 16px; }
+
+/* ── Toast notifications ── */
+#toast-container {
+  position: fixed;
+  top: 20px; right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+.toast {
+  padding: 14px 18px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(20px);
+  border: 1px solid;
+  max-width: 320px;
+  animation: toastIn 0.3s ease;
+  pointer-events: all;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.toast-icon { font-size: 18px; flex-shrink: 0; }
+.toast-body { flex: 1; }
+.toast-title { font-size: 12px; letter-spacing: 0.5px; margin-bottom: 2px; }
+.toast-msg   { font-size: 13px; font-weight: 400; color: rgba(255,255,255,0.85); }
+.toast.critical { background: rgba(255,23,68,0.15);  border-color: rgba(255,23,68,0.35);  }
+.toast.high     { background: rgba(255,145,0,0.15);  border-color: rgba(255,145,0,0.35);  }
+.toast.moderate { background: rgba(255,234,0,0.1);   border-color: rgba(255,234,0,0.3);   }
+.toast.low      { background: rgba(0,230,118,0.1);   border-color: rgba(0,230,118,0.3);   }
+.toast.info     { background: rgba(79,172,254,0.1);  border-color: rgba(79,172,254,0.3);  }
+@keyframes toastIn  { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+@keyframes toastOut { from{opacity:1;transform:translateX(0)} to{opacity:0;transform:translateX(20px)} }
+
+/* ── Search suggestions ── */
+.search-wrap { position: relative; flex: 1; }
+#suggestions {
+  position: absolute;
+  top: 100%; left: 0; right: 0;
+  background: #0d1f35;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-top: 4px;
+  z-index: 1000;
+  overflow: hidden;
+  display: none;
+}
+.suggestion-item {
+  padding: 9px 12px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.8);
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  transition: background 0.15s;
+}
+.suggestion-item:last-child { border-bottom: none; }
+.suggestion-item:hover { background: rgba(79,172,254,0.15); }
+
+/* ── Voice button ── */
+.voice-btn {
+  background: rgba(167,139,250,0.12);
+  border: 1px solid rgba(167,139,250,0.3);
+  color: var(--accent);
+  padding: 9px 13px;
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+  white-space: nowrap;
+}
+.voice-btn:hover { background: rgba(167,139,250,0.22); }
+.voice-btn.listening { background: rgba(255,23,68,0.15); border-color: rgba(255,23,68,0.4); color: var(--critical); animation: pulse-dot 1s infinite; }
+
+/* ── Chart ── */
+#chart-card { grid-column: 2; grid-row: 4; display: none; }
+.chart-wrap { position: relative; height: 200px; }
+
+/* ── Percentage pills ── */
+.pct-row { display: flex; gap: 8px; justify-content: center; margin-bottom: 14px; flex-wrap: wrap; }
+.pct-pill {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid;
+}
+.pct-traffic  { background: rgba(255,145,0,0.12);   border-color: rgba(255,145,0,0.3);   color: var(--high); }
+.pct-weather  { background: rgba(79,172,254,0.12);  border-color: rgba(79,172,254,0.3);  color: var(--primary); }
+.pct-time     { background: rgba(255,234,0,0.1);    border-color: rgba(255,234,0,0.25);  color: var(--moderate); }
+
+/* ── Location history markers ── */
+.loc-history-dot {
+  width: 10px; height: 10px;
+  background: rgba(167,139,250,0.7);
+  border: 2px solid rgba(167,139,250,0.4);
+  border-radius: 50%;
+}
+</style>
+</head>
+<body>
+
+<div class="page-title">
+  <h1>🚦 Smart Mobility Risk Predictor</h1>
+  <p>AI-powered travel risk analysis · Real-time weather · Route intelligence</p>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<div class="wrap">
+
+  <!-- ── LEFT: Input card ── -->
+  <div class="card" id="input-card">
+
+    <!-- Route mode selector -->
+    <div class="route-toggle">
+      <div class="route-btn active" id="mode-single" onclick="setMode('single')">📍 Single Point</div>
+      <div class="route-btn" id="mode-route" onclick="setMode('route')">🗺 Route A → B</div>
+    </div>
+
+    <div class="field">
+      <label>Traffic Level <span id="traffic-val">3</span>/5</label>
+      <input type="range" id="traffic" min="0" max="5" step="1" value="3">
+    </div>
+
+    <div class="row" id="single-coords">
+      <div class="field">
+        <label>Latitude</label>
+        <input type="number" id="lat" value="40.7128" step="0.0001">
+      </div>
+      <div class="field">
+        <label>Longitude</label>
+        <input type="number" id="lon" value="-74.0060" step="0.0001">
+      </div>
+    </div>
+
+    <div id="route-coords" style="display:none">
+      <div class="row">
+        <div class="field">
+          <label>🟢 Start Lat</label>
+          <input type="number" id="lat-a" value="40.7128" step="0.0001">
+        </div>
+        <div class="field">
+          <label>🟢 Start Lon</label>
+          <input type="number" id="lon-a" value="-74.0060" step="0.0001">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>🔴 End Lat</label>
+          <input type="number" id="lat-b" value="40.7580" step="0.0001">
+        </div>
+        <div class="field">
+          <label>🔴 End Lon</label>
+          <input type="number" id="lon-b" value="-73.9855" step="0.0001">
+        </div>
+      </div>
+    </div>
+
+    <div class="geo-row">
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <button class="btn-sm" id="geo-btn" onclick="getLocation()">📍 Use My Location</button>
+        <div id="geo-msg" style="font-size:11px;color:var(--high);display:none;max-width:200px;"></div>
+      </div>
+    </div>
+
+    <!-- Map -->
+    <div id="map-wrap">
+      <div class="map-search">
+        <div class="search-wrap">
+          <input type="text" id="search-input" placeholder="Search city or place…" autocomplete="off">
+          <div id="suggestions"></div>
+        </div>
+        <button class="btn-sm" onclick="searchPlace()" style="padding:8px 12px;">🔍</button>
+        <button class="voice-btn" id="voice-btn" onclick="startVoice()" title="Voice input">🎤</button>
+      </div>
+      <div id="search-msg"></div>
+      <div id="map"></div>
+      <div class="map-hint">🖱 Click map · 🎤 Voice · 🔍 Search</div>
+    </div>
+
+    <div class="field">
+      <label>Hour of Day (0–23) <span id="hour-val"></span></label>
+      <input type="number" id="hour" min="0" max="23" value="18">
+    </div>
+
+    <div class="toggle-row">
+      <span>Weekend / Holiday</span>
+      <label class="toggle">
+        <input type="checkbox" id="weekend">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+
+    <!-- Live mode -->
+    <div class="live-row">
+      <span><span class="live-dot" id="live-dot"></span>Live Mode (auto-refresh 60s)</span>
+      <label class="toggle">
+        <input type="checkbox" id="live-toggle" onchange="toggleLive()">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+
+    <button class="btn-predict" id="predict-btn" onclick="predict()">
+      <span id="btn-label">⚡ Predict Risk</span>
+      <div class="spinner" id="spinner"></div>
+    </button>
+  </div>
+
+  <!-- ── RIGHT TOP: Result card ── -->
+  <div class="card" id="result">
+
+    <div style="text-align:center;margin-bottom:4px;">
+      <span class="source-tag" id="source-tag"></span>
+    </div>
+
+    <!-- Gauge -->
+    <div class="gauge-wrap">
+      <svg class="gauge-svg" viewBox="0 0 200 110">
+        <path class="gauge-track" d="M24,100 A88,88 0 0,1 176,100"/>
+        <path class="gauge-fill" id="gauge-fill" d="M24,100 A88,88 0 0,1 176,100"/>
+      </svg>
+      <div class="gauge-score" id="gauge-score">0</div>
+      <div class="gauge-sub">Risk Score / 100</div>
+    </div>
+
+    <!-- Weather -->
+    <div class="weather-strip" id="weather-strip"></div>
+
+    <!-- Factor % pills -->
+    <div class="pct-row" id="pct-row">
+      <span class="pct-pill pct-traffic" id="pct-traffic">🚗 Traffic 0%</span>
+      <span class="pct-pill pct-weather" id="pct-weather">🌦 Weather 0%</span>
+      <span class="pct-pill pct-time"    id="pct-time">🕐 Time 0%</span>
+    </div>
+
+    <!-- Advice -->
+    <div class="advice-box">
+      <div class="advice-level" id="adv-level"></div>
+      <div class="advice-text"  id="adv-text"></div>
+    </div>
+
+    <!-- AI Report -->
+    <div class="ai-report">
+      <div class="ai-label">🤖 AI Analysis</div>
+      <div id="ai-report-text"></div>
+    </div>
+
+    <!-- Risk Breakdown -->
+    <div class="breakdown" id="breakdown-section">
+      <div class="card-title">Risk Breakdown</div>
+      <div class="breakdown-row">
+        <div class="breakdown-label">Traffic</div>
+        <div class="breakdown-bar-wrap"><div class="breakdown-bar" id="bar-traffic" style="background:var(--high)"></div></div>
+        <div class="breakdown-pts" id="pts-traffic">0</div>
+      </div>
+      <div class="breakdown-row">
+        <div class="breakdown-label">Time</div>
+        <div class="breakdown-bar-wrap"><div class="breakdown-bar" id="bar-time" style="background:var(--moderate)"></div></div>
+        <div class="breakdown-pts" id="pts-time">0</div>
+      </div>
+      <div class="breakdown-row">
+        <div class="breakdown-label">Weather</div>
+        <div class="breakdown-bar-wrap"><div class="breakdown-bar" id="bar-weather" style="background:var(--primary)"></div></div>
+        <div class="breakdown-pts" id="pts-weather">0</div>
+      </div>
+    </div>
+
+    <!-- Best time -->
+    <div class="best-time-box" id="best-time-box">
+      <div>
+        <div class="best-time-label">Best time to travel today</div>
+        <div class="best-time-val" id="best-time-val">--</div>
+      </div>
+      <div style="font-size:24px" id="best-time-emoji">🟢</div>
+    </div>
+
+    <!-- What-if -->
+    <div style="border-top:1px solid var(--border);padding-top:14px;">
+      <div class="sim-title">What-If Scenarios</div>
+      <div class="sim-btns">
+        <button class="btn-sm" onclick="simulate('rain')">🌧 Rain</button>
+        <button class="btn-sm" onclick="simulate('traffic')">🚗 Traffic</button>
+        <button class="btn-sm" onclick="simulate('storm')">⛈ Storm</button>
+        <button class="btn-sm" onclick="simulate('night')">🌙 Night</button>
+      </div>
+      <div id="sim-result">
+        <div class="sim-scores">
+          <div class="sim-score-box"><div class="lbl">Current</div><div class="val" id="sim-cur">0</div></div>
+          <div class="sim-arrow">→</div>
+          <div class="sim-score-box"><div class="lbl">Scenario</div><div class="val c-critical" id="sim-new">0</div></div>
+        </div>
+        <div id="sim-msg"></div>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="action-row">
+      <button class="btn-sm" onclick="exportPNG()">📸 Export PNG</button>
+      <button class="btn-sm" onclick="copyResult()">📋 Copy Report</button>
+      <button class="btn-sm" onclick="shareResult()">🔗 Share</button>
+    </div>
+  </div>
+
+  <!-- ── RIGHT MID: Hourly forecast ── -->
+  <div class="card" id="forecast-card">
+    <div class="card-title">12-Hour Risk Forecast</div>
+    <div class="forecast-grid" id="forecast-grid"></div>
+  </div>
+
+  <!-- ── RIGHT BOTTOM: History ── -->
+  <div class="card" id="history-card">
+    <div class="card-title">Recent Predictions</div>
+    <ul id="history-list"></ul>
+  </div>
+
+  <!-- ── RIGHT: Chart ── -->
+  <div class="card" id="chart-card">
+    <div class="card-title">Risk Score — Last Predictions</div>
+    <div class="chart-wrap">
+      <canvas id="risk-chart"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────
+const RISK_COLORS = { Low:'--low', Moderate:'--moderate', High:'--high', Critical:'--critical' };
+const WEATHER_EMOJI = { Clear:'☀️',Clouds:'☁️',Rain:'🌧',Drizzle:'🌦',Thunderstorm:'⛈',Snow:'❄️',Fog:'🌫',Mist:'🌫' };
+const DEFAULT = [40.7128, -74.0060];
+const LS_KEY  = 'mobility_history';
+
+let currentScore = 0;
+let liveTimer    = null;
+let routeMode    = false;
+let clickTarget  = 'single';
+let lastResult   = null;
+let riskChart    = null;
+let searchTimer  = null;
+
+// Location history markers (last 5)
+const locHistory = [];
+
+// ── Toast system ───────────────────────────────────────────────────
+function showToast(type, title, msg, duration = 5000) {
+  const icons = { critical:'🚨', high:'⚠️', moderate:'🟡', low:'✅', info:'ℹ️' };
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<div class="toast-icon">${icons[type]||'ℹ️'}</div>
+    <div class="toast-body"><div class="toast-title">${title}</div><div class="toast-msg">${msg}</div></div>`;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.style.animation = 'toastOut 0.3s ease forwards';
+    setTimeout(() => el.remove(), 300);
+  }, duration);
+}
+
+// ── Map setup ──────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView(DEFAULT, 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', maxZoom: 19
+}).addTo(map);
+
+function makeIcon(color, size = 16) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:${size}px;height:${size}px;background:${color};border:3px solid #fff;border-radius:50%;
+           box-shadow:0 0 10px ${color}88,0 0 20px ${color}44;"></div>`,
+    iconSize: [size,size], iconAnchor: [size/2,size/2]
+  });
+}
+function makeHistIcon() {
+  return L.divIcon({
+    className: '',
+    html: `<div class="loc-history-dot"></div>`,
+    iconSize: [10,10], iconAnchor: [5,5]
+  });
+}
+
+const markerA = L.marker(DEFAULT, { icon: makeIcon('#4facfe'), draggable: true }).addTo(map);
+let   markerB = null;
+
+function setLocation(lat, lon, target) {
+  const ll = [parseFloat(lat.toFixed(4)), parseFloat(lon.toFixed(4))];
+  if (target === 'b') {
+    document.getElementById('lat-b').value = ll[0];
+    document.getElementById('lon-b').value = ll[1];
+    if (!markerB) {
+      markerB = L.marker(ll, { icon: makeIcon('#ff1744'), draggable: true }).addTo(map);
+      markerB.on('dragend', e => { const {lat,lng}=e.target.getLatLng(); setLocation(lat,lng,'b'); });
+    } else { markerB.setLatLng(ll); }
+  } else {
+    document.getElementById('lat').value = ll[0];
+    document.getElementById('lon').value = ll[1];
+    markerA.setLatLng(ll);
+    map.panTo(ll);
+    addLocHistory(ll);
+  }
+}
+
+// Location history markers
+function addLocHistory(ll) {
+  const m = L.marker(ll, { icon: makeHistIcon(), interactive: false }).addTo(map);
+  locHistory.push(m);
+  if (locHistory.length > 5) {
+    const old = locHistory.shift();
+    map.removeLayer(old);
+  }
+}
+
+map.on('click', e => {
+  if (routeMode) {
+    if (!markerB || clickTarget === 'a') { setLocation(e.latlng.lat, e.latlng.lng, 'single'); clickTarget = 'b'; }
+    else { setLocation(e.latlng.lat, e.latlng.lng, 'b'); clickTarget = 'a'; }
+  } else {
+    setLocation(e.latlng.lat, e.latlng.lng, 'single');
+  }
+});
+markerA.on('dragend', e => { const {lat,lng}=e.target.getLatLng(); setLocation(lat,lng,'single'); });
+
+// ── Mode toggle ────────────────────────────────────────────────────
+function setMode(mode) {
+  routeMode = mode === 'route';
+  document.getElementById('mode-single').classList.toggle('active', !routeMode);
+  document.getElementById('mode-route').classList.toggle('active', routeMode);
+  document.getElementById('single-coords').style.display = routeMode ? 'none' : '';
+  document.getElementById('route-coords').style.display  = routeMode ? '' : 'none';
+  if (!routeMode && markerB) { map.removeLayer(markerB); markerB = null; clickTarget = 'single'; }
+  if (routeMode) clickTarget = 'a';
+}
+
+// ── Search with suggestions ────────────────────────────────────────
+async function fetchSuggestions(q) {
+  if (q.length < 3) { hideSuggestions(); return; }
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5`,
+      { headers: {'Accept-Language':'en'} }
+    );
+    const data = await r.json();
+    showSuggestions(data);
+  } catch { hideSuggestions(); }
+}
+
+function showSuggestions(results) {
+  const box = document.getElementById('suggestions');
+  if (!results.length) { hideSuggestions(); return; }
+  box.innerHTML = results.map((r,i) =>
+    `<div class="suggestion-item" onclick="selectSuggestion(${r.lat},${r.lon},'${r.display_name.replace(/'/g,"\\'")}')">
+      📍 ${r.display_name.split(',').slice(0,3).join(', ')}
+    </div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+function hideSuggestions() {
+  document.getElementById('suggestions').style.display = 'none';
+}
+
+function selectSuggestion(lat, lon, name) {
+  setLocation(parseFloat(lat), parseFloat(lon), 'single');
+  map.setView([lat, lon], 13);
+  document.getElementById('search-input').value = name.split(',').slice(0,2).join(',');
+  document.getElementById('search-msg').textContent = '📍 ' + name.split(',').slice(0,2).join(',');
+  hideSuggestions();
+}
+
+async function searchPlace() {
+  const q = document.getElementById('search-input').value.trim();
+  const msg = document.getElementById('search-msg');
+  if (!q) return;
+  msg.textContent = 'Searching…';
+  hideSuggestions();
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
+      { headers: {'Accept-Language':'en'} });
+    const d = await r.json();
+    if (!d.length) { msg.textContent = '⚠️ Not found'; return; }
+    selectSuggestion(d[0].lat, d[0].lon, d[0].display_name);
+  } catch { msg.textContent = '⚠️ Search failed'; }
+}
+
+document.getElementById('search-input').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => fetchSuggestions(e.target.value.trim()), 350);
+});
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { hideSuggestions(); searchPlace(); }
+  if (e.key === 'Escape') hideSuggestions();
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('#map-wrap')) hideSuggestions();
+});
+
+// ── Voice input ────────────────────────────────────────────────────
+function startVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast('info', 'Voice Not Supported', 'Your browser does not support voice input. Try Chrome.');
+    return;
+  }
+  const btn = document.getElementById('voice-btn');
+  const rec = new SpeechRecognition();
+  rec.lang = 'en-US';
+  rec.interimResults = false;
+  rec.maxAlternatives = 1;
+
+  btn.classList.add('listening');
+  btn.textContent = '🔴';
+  showToast('info', 'Listening…', 'Say a city name like "Check risk at Mumbai"');
+
+  rec.onresult = e => {
+    const transcript = e.results[0][0].transcript;
+    document.getElementById('search-input').value = transcript;
+    showToast('info', 'Voice captured', `"${transcript}" — searching…`);
+    searchPlace().then(() => setTimeout(() => predict(), 1200));
+  };
+  rec.onerror = () => showToast('info', 'Voice error', 'Could not understand. Try again.');
+  rec.onend   = () => { btn.classList.remove('listening'); btn.textContent = '🎤'; };
+  rec.start();
+}
+
+// ── Geolocation ────────────────────────────────────────────────────
+function getLocation() {
+  const btn = document.getElementById('geo-btn');
+  const msg = document.getElementById('geo-msg');
+  btn.textContent = 'Locating…'; btn.disabled = true; msg.style.display = 'none';
+  navigator.geolocation?.getCurrentPosition(
+    pos => {
+      setLocation(pos.coords.latitude, pos.coords.longitude, 'single');
+      map.setView([pos.coords.latitude, pos.coords.longitude], 14);
+      btn.textContent = '✅ Location set'; btn.disabled = false;
+    },
+    () => {
+      btn.textContent = '📍 Use My Location'; btn.disabled = false;
+      msg.textContent = '⚠️ Location denied. Click map or enter manually.';
+      msg.style.display = 'block';
+    },
+    { timeout: 8000 }
+  );
+}
+
+// ── Hour label ─────────────────────────────────────────────────────
+document.getElementById('hour').value = new Date().getHours();
+updateHourLabel();
+document.getElementById('traffic').addEventListener('input', e => {
+  document.getElementById('traffic-val').textContent = e.target.value;
+});
+document.getElementById('hour').addEventListener('input', updateHourLabel);
+function updateHourLabel() {
+  const h = parseInt(document.getElementById('hour').value);
+  const p = h < 12 ? 'AM' : 'PM';
+  document.getElementById('hour-val').textContent = ((h%12)||12)+':00 '+p;
+}
+
+// ── Live mode ──────────────────────────────────────────────────────
+function toggleLive() {
+  const on  = document.getElementById('live-toggle').checked;
+  const dot = document.getElementById('live-dot');
+  if (on) {
+    dot.classList.add('active');
+    liveTimer = setInterval(() => predict(true), 60000);
+    showToast('info', 'Live Mode ON', 'Auto-refreshing every 60 seconds.');
+  } else {
+    dot.classList.remove('active');
+    clearInterval(liveTimer); liveTimer = null;
+  }
+}
+
+// ── Predict ────────────────────────────────────────────────────────
+async function predict(silent = false) {
+  const btn   = document.getElementById('predict-btn');
+  const label = document.getElementById('btn-label');
+  const spin  = document.getElementById('spinner');
+  const hour  = parseInt(document.getElementById('hour').value);
+
+  if (isNaN(hour) || hour < 0 || hour > 23) {
+    showToast('info', 'Invalid input', 'Enter a valid hour between 0 and 23.');
+    return;
+  }
+
+  if (!silent) { btn.disabled = true; label.textContent = 'Analysing…'; spin.style.display = 'block'; }
+
+  let lat, lon;
+  if (routeMode) {
+    lat = (parseFloat(document.getElementById('lat-a').value) + parseFloat(document.getElementById('lat-b').value)) / 2;
+    lon = (parseFloat(document.getElementById('lon-a').value) + parseFloat(document.getElementById('lon-b').value)) / 2;
+  } else {
+    lat = parseFloat(document.getElementById('lat').value);
+    lon = parseFloat(document.getElementById('lon').value);
+  }
+
+  const payload = {
+    traffic_level: parseFloat(document.getElementById('traffic').value),
+    time_hour: hour, lat, lon,
+    is_weekend: document.getElementById('weekend').checked
+  };
+
+  try {
+    const res = await fetch('http://127.0.0.1:5000/predict', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    const d = await res.json();
+    lastResult = d;
+    renderResult(d);
+  } catch (err) {
+    if (!silent) showToast('info', 'Server unreachable', 'Make sure python3 app.py is running.');
+    console.error(err);
+  } finally {
+    if (!silent) { btn.disabled = false; label.textContent = '⚡ Predict Risk'; spin.style.display = 'none'; }
+  }
+}
+
+// ── Render ─────────────────────────────────────────────────────────
+function renderResult(d) {
+  currentScore = d.risk_score;
+  const cc = 'c-' + d.risk_level.toLowerCase();
+
+  // Gauge
+  const offset = 251 - (251 * d.risk_score / 100);
+  const fill = document.getElementById('gauge-fill');
+  fill.style.strokeDashoffset = offset;
+  fill.style.stroke = getComputedStyle(document.documentElement)
+    .getPropertyValue(RISK_COLORS[d.risk_level] || '--primary').trim();
+  animateCount('gauge-score', 0, d.risk_score, 1000);
+
+  // Source tag
+  const tag = document.getElementById('source-tag');
+  tag.textContent = d.weather.source === 'live' ? '🌐 Live Weather' : '🎲 Simulated Weather';
+  tag.className = 'source-tag source-' + d.weather.source;
+
+  // Weather
+  const w = d.weather;
+  const emo = WEATHER_EMOJI[w.condition] || '🌡';
+  document.getElementById('weather-strip').innerHTML = `
+    <span class="badge">${emo} ${w.condition}</span>
+    <span class="badge">🌡 ${w.temperature}°C (feels ${w.feels_like}°C)</span>
+    <span class="badge">💧 ${w.humidity}%</span>
+    <span class="badge">💨 ${w.wind_speed} m/s</span>`;
+
+  // Percentage pills
+  const bd = d.breakdown;
+  document.getElementById('pct-traffic').textContent = `🚗 Traffic ${bd.pct_traffic||0}%`;
+  document.getElementById('pct-weather').textContent = `🌦 Weather ${bd.pct_weather||0}%`;
+  document.getElementById('pct-time').textContent    = `🕐 Time ${bd.pct_time||0}%`;
+
+  // Advice
+  document.getElementById('adv-level').textContent = d.risk_emoji + ' ' + d.risk_level + ' Risk';
+  document.getElementById('adv-level').className = 'advice-level ' + cc;
+  document.getElementById('adv-text').textContent = d.advice;
+
+  // AI report typewriter
+  typeWriter('ai-report-text', d.ai_report, 18);
+
+  // Breakdown bars
+  animateBar('bar-traffic', 'pts-traffic', bd.traffic, 40);
+  animateBar('bar-time',    'pts-time',    bd.time,    30);
+  animateBar('bar-weather', 'pts-weather', bd.weather, 40);
+
+  // Best time
+  const bt = d.best_time;
+  const bp = bt.hour < 12 ? 'AM' : 'PM';
+  document.getElementById('best-time-val').textContent = ((bt.hour%12)||12)+':00 '+bp+' — Score '+bt.score;
+  document.getElementById('best-time-emoji').textContent = bt.emoji;
+
+  // Forecast
+  renderForecast(d.forecast);
+
+  // Show all cards
+  ['result','forecast-card','history-card','chart-card'].forEach(id => {
+    document.getElementById(id).style.display = 'block';
+  });
+  document.getElementById('sim-result').style.display = 'none';
+
+  // Toast alert based on risk
+  const toastMap = {
+    Critical: ['critical', '🚨 Critical Risk', 'Avoid travel if possible. Danger level is very high.'],
+    High:     ['high',     '⚠️ High Risk',     'Drive carefully. Conditions are difficult.'],
+    Moderate: ['moderate', '🟡 Moderate Risk', 'Stay alert. Some risk factors present.'],
+    Low:      ['low',      '✅ Low Risk',       'Safe to travel. Roads look clear.'],
+  };
+  const [type, title, msg] = toastMap[d.risk_level] || ['info','Result ready','Prediction complete.'];
+  showToast(type, title, msg);
+
+  addHistory(d);
+  updateChart(d);
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+function typeWriter(id, text, speed) {
+  const el = document.getElementById(id);
+  el.textContent = ''; el.classList.add('ai-typing');
+  let i = 0;
+  const t = setInterval(() => {
+    el.textContent += text[i++];
+    if (i >= text.length) { clearInterval(t); el.classList.remove('ai-typing'); }
+  }, speed);
+}
+
+function animateBar(barId, ptsId, value, max) {
+  const bar = document.getElementById(barId);
+  const pts = document.getElementById(ptsId);
+  bar.style.width = '0%'; pts.textContent = '0';
+  setTimeout(() => {
+    bar.style.width = Math.min((value / max) * 100, 100) + '%';
+    animateCount(ptsId, 0, value, 800);
+  }, 100);
+}
+
+function animateCount(id, from, to, duration) {
+  const el = document.getElementById(id);
+  const start = performance.now();
+  function step(now) {
+    const t = Math.min((now - start) / duration, 1);
+    el.textContent = Math.round(from + (to - from) * t);
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function renderForecast(forecast) {
+  document.getElementById('forecast-grid').innerHTML = forecast.map(f => {
+    const h = f.hour, p = h < 12 ? 'AM' : 'PM';
+    const label = ((h%12)||12)+p;
+    return `<div class="forecast-item">
+      <div class="forecast-hour">${label}</div>
+      <div class="forecast-emoji">${f.emoji}</div>
+      <div class="forecast-score c-${f.level.toLowerCase()}">${f.score}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Chart.js ───────────────────────────────────────────────────────
+function updateChart(d) {
+  const history = loadHistory();
+  const labels  = history.map(h => h.time);
+  const scores  = history.map(h => h.score);
+  const colors  = scores.map(s =>
+    s >= 75 ? '#ff1744' : s >= 55 ? '#ff9100' : s >= 30 ? '#ffea00' : '#00e676'
+  );
+
+  if (riskChart) {
+    riskChart.data.labels  = labels;
+    riskChart.data.datasets[0].data            = scores;
+    riskChart.data.datasets[0].pointBackgroundColor = colors;
+    riskChart.update();
+    return;
+  }
+
+  const ctx = document.getElementById('risk-chart').getContext('2d');
+  riskChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Risk Score',
+        data: scores,
+        borderColor: '#4facfe',
+        backgroundColor: 'rgba(79,172,254,0.08)',
+        pointBackgroundColor: colors,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(10,15,30,0.9)',
+          borderColor: 'rgba(79,172,254,0.3)',
+          borderWidth: 1,
+          titleColor: '#4facfe',
+          bodyColor: '#fff',
+          callbacks: {
+            label: ctx => `Risk: ${ctx.parsed.y}/100`
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { min: 0, max: 100, ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+      }
+    }
+  });
+}
+
+// ── localStorage history ───────────────────────────────────────────
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; }
+  catch { return []; }
+}
+
+function saveHistory(arr) {
+  localStorage.setItem(LS_KEY, JSON.stringify(arr));
+}
+
+function addHistory(d) {
+  const now  = new Date();
+  const time = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+  const lat  = parseFloat(document.getElementById('lat').value).toFixed(2);
+  const lon  = parseFloat(document.getElementById('lon').value).toFixed(2);
+
+  const arr = loadHistory();
+  arr.unshift({ time, score: d.risk_score, level: d.risk_level, loc: `${lat},${lon}` });
+  if (arr.length > 6) arr.pop();
+  saveHistory(arr);
+
+  document.getElementById('history-list').innerHTML = arr.map(h => `
+    <li>
+      <span>${h.time} · ${h.loc}</span>
+      <span class="hist-score c-${h.level.toLowerCase()}">${h.score} ${h.level}</span>
+    </li>`).join('');
+}
+
+// Load history on page start
+(function initHistory() {
+  const arr = loadHistory();
+  if (!arr.length) return;
+  document.getElementById('history-list').innerHTML = arr.map(h => `
+    <li>
+      <span>${h.time} · ${h.loc}</span>
+      <span class="hist-score c-${h.level.toLowerCase()}">${h.score} ${h.level}</span>
+    </li>`).join('');
+  document.getElementById('history-card').style.display = 'block';
+})();
+
+// ── Simulate ───────────────────────────────────────────────────────
+function simulate(type) {
+  const delta  = { rain:25, traffic:35, storm:50, night:20 };
+  const labels = { rain:'Rain surge', traffic:'Traffic surge', storm:'Storm', night:'Night driving' };
+  const newScore = Math.min(currentScore + (delta[type]||20), 100);
+  document.getElementById('sim-cur').textContent = currentScore;
+  document.getElementById('sim-new').textContent = newScore;
+  document.getElementById('sim-msg').textContent =
+    labels[type]+' → '+newScore+'/100. '+(newScore>=75?'Strongly advise waiting.':'Proceed with caution.');
+  const sr = document.getElementById('sim-result');
+  sr.style.display = 'none';
+  setTimeout(() => sr.style.display = 'block', 40);
+}
+
+// ── Export / Share ─────────────────────────────────────────────────
+function exportPNG() {
+  html2canvas(document.getElementById('result'), { backgroundColor:'#0a0f1e', scale:2 }).then(canvas => {
+    const a = document.createElement('a');
+    a.download = 'risk-report.png'; a.href = canvas.toDataURL(); a.click();
+  });
+}
+
+function copyResult() {
+  if (!lastResult) return;
+  const d = lastResult;
+  const bd = d.breakdown;
+  const text = `🚦 Mobility Risk Report\nScore: ${d.risk_score}/100 (${d.risk_level})\n`+
+    `Factors: Traffic ${bd.pct_traffic}%, Weather ${bd.pct_weather}%, Time ${bd.pct_time}%\n`+
+    `Weather: ${d.weather.condition}, ${d.weather.temperature}°C\n`+
+    `Advice: ${d.advice}\nAI: ${d.ai_report}\nBest time: ${d.best_time.hour}:00 (score ${d.best_time.score})`;
+  navigator.clipboard.writeText(text)
+    .then(() => showToast('low', 'Copied!', 'Report copied to clipboard.'));
+}
+
+function shareResult() {
+  if (!lastResult) return;
+  const d = lastResult;
+  const text = `🚦 Risk: ${d.risk_score}/100 (${d.risk_level}) · ${d.weather.condition} ${d.weather.temperature}°C · ${d.advice}`;
+  if (navigator.share) navigator.share({ title:'Mobility Risk Report', text });
+  else navigator.clipboard.writeText(text)
+    .then(() => showToast('info', 'Copied', 'Share not supported — copied to clipboard.'));
+}
+</script>
